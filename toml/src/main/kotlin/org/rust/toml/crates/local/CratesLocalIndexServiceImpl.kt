@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import com.google.common.annotations.VisibleForTesting
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.PersistentStateComponent
@@ -22,6 +23,7 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
+import com.intellij.openapiext.isUnitTestMode
 import com.intellij.util.io.*
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.errors.GitAPIException
@@ -34,6 +36,7 @@ import org.eclipse.jgit.treewalk.TreeWalk
 import org.eclipse.jgit.treewalk.filter.OrTreeFilter
 import org.eclipse.jgit.treewalk.filter.PathFilter
 import org.eclipse.jgit.treewalk.filter.TreeFilter
+import org.jetbrains.annotations.TestOnly
 import org.rust.cargo.CargoConstants
 import org.rust.openapiext.RsPathManager
 import org.rust.stdext.cleanDirectory
@@ -94,16 +97,21 @@ class CratesLocalIndexServiceImpl
 
     init {
         // Check index for update on `Cargo.toml` changes
-        ApplicationManager.getApplication().messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
-            override fun after(events: MutableList<out VFileEvent>) {
-                if (events.any { it.pathEndsWith(CargoConstants.MANIFEST_FILE) }) {
-                    if (isReady.get()) {
-                        updateIfNeeded()
+        if (!isUnitTestMode) {
+            ApplicationManager.getApplication().messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
+                override fun after(events: MutableList<out VFileEvent>) {
+                    if (events.any { it.pathEndsWith(CargoConstants.MANIFEST_FILE) }) {
+                        if (isReady.get()) {
+                            updateIfNeeded()
+                        }
                     }
                 }
-            }
-        })
+            })
+        }
     }
+
+    @VisibleForTesting
+    override fun isReady(): Boolean = isReady.get()
 
     override fun getState(): CratesLocalIndexState = state
     override fun loadState(state: CratesLocalIndexState) {
@@ -274,6 +282,19 @@ class CratesLocalIndexServiceImpl
         private const val CRATES_INDEX_VERSION: Int = 0
 
         private val LOG: Logger = logger<CratesLocalIndexServiceImpl>()
+    }
+
+    @TestOnly
+    var indexedCommitHash: String = INVALID_COMMIT_HASH
+
+    /**
+     * Simulates the behaviour of real service.
+     * Loads crates local index in current thread and updates local [indexedCommitHash].
+     */
+    @TestOnly
+    fun updateCrates() {
+        updateCrates(registryHeadCommitHash, indexedCommitHash)
+        indexedCommitHash = registryHeadCommitHash
     }
 }
 
