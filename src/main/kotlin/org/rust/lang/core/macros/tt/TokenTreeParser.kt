@@ -6,7 +6,6 @@
 package org.rust.lang.core.macros.tt
 
 import com.intellij.lang.PsiBuilder
-import com.intellij.openapi.util.TextRange
 import com.intellij.psi.TokenType.WHITE_SPACE
 import com.intellij.psi.tree.IElementType
 import com.intellij.psi.tree.TokenSet
@@ -23,7 +22,7 @@ fun PsiBuilder.parseSubtree(): MappedSubtree {
 private class TokenTreeParser(
     private val lexer: PsiBuilder
 ) {
-    private val tokenMap = mutableListOf<TokenTextRange>()
+    private val tokenMap = mutableListOf<TokenMetadata>()
 
     fun parse(): MappedSubtree {
         val result = mutableListOf<TokenTree>()
@@ -54,7 +53,7 @@ private class TokenTreeParser(
     }
 
     private fun parseSubtree(offset: Int, delimKind: MacroBraces, result: MutableList<TokenTree>) {
-        val delimLeaf = Delimiter(allocDelimId(offset), delimKind)
+        val delimLeaf = Delimiter(allocDelimId(offset, nextWhitespaceOrCommentText()), delimKind)
         val subtreeResult = mutableListOf<TokenTree>()
 
         lexer.advanceLexer()
@@ -63,7 +62,7 @@ private class TokenTreeParser(
             val tokenType = lexer.tokenType
 
             if (tokenType == null) {
-                result += Leaf.Punct(delimKind.openText, Spacing.Alone, allocId(offset, 1))
+                result += Leaf.Punct(delimKind.openText, Spacing.Alone, allocId(offset, 1, ""))
                 result += subtreeResult
                 return
             }
@@ -73,7 +72,7 @@ private class TokenTreeParser(
             parse(lexer.currentOffset, tokenType, subtreeResult)
         }
 
-        closeDelim(delimLeaf.id, lexer.currentOffset)
+        closeDelim(delimLeaf.id, lexer.currentOffset, nextWhitespaceOrCommentText())
 
         result += Subtree(delimLeaf, subtreeResult)
     }
@@ -87,47 +86,59 @@ private class TokenTreeParser(
                 } else {
                     tokenText
                 }
-                result += Leaf.Literal(tokenText2, allocId(offset, tokenText2.length))
+                result += Leaf.Literal(tokenText2, allocId(offset, tokenText2.length, nextWhitespaceOrCommentText()))
             }
-            in RS_LITERALS -> result += Leaf.Literal(tokenText, allocId(offset, tokenText.length))
-            in RS_IDENTIFIER_TOKENS -> result += Leaf.Ident(tokenText, allocId(offset, tokenText.length))
+            in RS_LITERALS -> result += Leaf.Literal(tokenText, allocId(offset, tokenText.length, nextWhitespaceOrCommentText()))
+            in RS_IDENTIFIER_TOKENS -> result += Leaf.Ident(tokenText, allocId(offset, tokenText.length, nextWhitespaceOrCommentText()))
             QUOTE_IDENTIFIER -> {
-                result += Leaf.Punct(tokenText[0].toString(), Spacing.Joint, allocId(offset, 1))
-                result += Leaf.Ident(tokenText.substring(1), allocId(offset + 1, tokenText.length - 1))
+                result += Leaf.Punct(tokenText[0].toString(), Spacing.Joint, allocId(offset, 1, ""))
+                result += Leaf.Ident(tokenText.substring(1), allocId(offset + 1, tokenText.length - 1, nextWhitespaceOrCommentText()))
             }
             else -> {
                 for (i in tokenText.indices) {
                     val isLastChar = i == tokenText.lastIndex
                     val char = tokenText[i].toString()
-                    val spacing = if (!isLastChar) {
-                        Spacing.Joint
+                    val (spacing, rightTrivia) = if (!isLastChar) {
+                        Spacing.Joint to ""
                     } else {
                         when (lexer.rawLookup(1)) {
-                            null -> Spacing.Alone // The last token is always alone
-                            in NEXT_TOKEN_ALONE_SET -> Spacing.Alone
-                            else -> Spacing.Joint
+                            null -> Spacing.Alone to "" // The last token is always alone
+                            in NEXT_TOKEN_ALONE_SET -> Spacing.Alone to nextWhitespaceOrCommentText()
+                            else -> Spacing.Joint to ""
                         }
                     }
-                    result += Leaf.Punct(char, spacing, allocId(offset + i, 1))
+                    result += Leaf.Punct(char, spacing, allocId(offset + i, 1, rightTrivia))
                 }
             }
         }
     }
 
-    private fun allocId(startOffset: Int, length: Int): Int {
+    private fun allocId(startOffset: Int, length: Int, rightTrivia: CharSequence): Int {
         val id = tokenMap.size
-        tokenMap += TokenTextRange.Token(TextRange(startOffset, startOffset + length))
+        tokenMap += TokenMetadata.Token(startOffset, rightTrivia)
         return id
     }
 
-    private fun allocDelimId(openOffset: Int): Int {
+    private fun allocDelimId(openOffset: Int, rightTrivia: CharSequence): Int {
         val id = tokenMap.size
-        tokenMap += TokenTextRange.Delimiter(openOffset, -1)
+        tokenMap += TokenMetadata.Delimiter(TokenMetadata.Token(openOffset, rightTrivia), null)
         return id
     }
 
-    private fun closeDelim(tokeId: Int, closeOffset: Int) {
-        tokenMap[tokeId] = (tokenMap[tokeId] as TokenTextRange.Delimiter).copy(closeOffset = closeOffset)
+    private fun closeDelim(tokeId: Int, closeOffset: Int, rightTrivia: CharSequence) {
+        tokenMap[tokeId] = (tokenMap[tokeId] as TokenMetadata.Delimiter)
+            .copy(close = TokenMetadata.Token(closeOffset, rightTrivia))
+    }
+
+    private fun nextWhitespaceOrCommentText(): CharSequence {
+        var counter = 1;
+        while (lexer.rawLookup(counter) in WHITESPACE_OR_COMMENTS) {
+            counter++
+        }
+        if (counter == 1) return ""
+        val startOffset = lexer.rawTokenTypeStart(1)
+        val endOffset = lexer.rawTokenTypeStart(counter)
+        return lexer.originalText.subSequence(startOffset, endOffset)
     }
 }
 
@@ -136,4 +147,9 @@ private val NEXT_TOKEN_ALONE_SET = TokenSet.orSet(
     RS_COMMENTS,
     RS_LITERALS,
     RS_IDENTIFIER_TOKENS,
+)
+
+private val WHITESPACE_OR_COMMENTS = TokenSet.orSet(
+    tokenSetOf(WHITE_SPACE),
+    RS_COMMENTS
 )

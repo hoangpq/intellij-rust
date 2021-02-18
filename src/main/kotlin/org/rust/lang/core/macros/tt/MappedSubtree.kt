@@ -5,21 +5,21 @@
 
 package org.rust.lang.core.macros.tt
 
-import com.intellij.openapi.util.TextRange
 import com.intellij.util.SmartList
 import org.rust.lang.core.macros.MappedTextRange
 import org.rust.lang.core.macros.RangeMap
 import org.rust.lang.core.macros.mergeAdd
+import org.rust.lang.core.psi.MacroBraces
 
 data class MappedSubtree(val subtree: TokenTree.Subtree, val tokenMap: TokenMap)
 
-class TokenMap(val map: List<TokenTextRange>) {
-    fun get(id: Int): TokenTextRange? = map.getOrNull(id)
+class TokenMap(val map: List<TokenMetadata>) {
+    fun get(id: Int): TokenMetadata? = map.getOrNull(id)
 }
 
-sealed class TokenTextRange {
-    data class Token(val range: TextRange): TokenTextRange()
-    data class Delimiter(val openOffset: Int, val closeOffset: Int): TokenTextRange()
+sealed class TokenMetadata {
+    data class Token(val startOffset: Int, val rightTrivia: CharSequence): TokenMetadata()
+    data class Delimiter(val open: Token, val close: Token?): TokenMetadata()
 }
 
 fun MappedSubtree.toMappedText(): Pair<CharSequence, RangeMap> {
@@ -39,53 +39,61 @@ private class SubtreeTextBuilder(
     }
 
     private fun TokenTree.Subtree.appendSubtree() {
-        delimiter?.let { appendOpenDelim(it) }
+        delimiter?.let { appendDelimiterPart(it, DelimiterBracePart.OPEN) }
         for (tokenTree in tokenTrees) {
             when (tokenTree) {
                 is TokenTree.Leaf -> tokenTree.appendLeaf()
                 is TokenTree.Subtree -> tokenTree.appendSubtree()
             }
         }
-        delimiter?.let { appendCloseDelim(it) }
+        delimiter?.let { appendDelimiterPart(it, DelimiterBracePart.CLOSE) }
     }
 
     private fun TokenTree.Leaf.appendLeaf() {
         when (this) {
-            is TokenTree.Leaf.Literal -> append(text, id)
+            is TokenTree.Leaf.Literal -> append(text, id, Spacing.Joint)
             is TokenTree.Leaf.Ident -> {
-                append(text, id)
-                sb.append(" ")
+                append(text, id, Spacing.Alone)
             }
             is TokenTree.Leaf.Punct -> {
-                append(char, id)
-                if (spacing == Spacing.Alone) {
-                    sb.append(" ")
-                }
+                append(char, id, spacing)
             }
         }
     }
 
-    private fun append(text: CharSequence, id: Int) {
-        val range = (tokenMap.get(id) as? TokenTextRange.Token)?.range
-        if (range != null) {
-            ranges.mergeAdd(MappedTextRange(range.startOffset, sb.length, text.length))
+    private fun append(text: CharSequence, id: Int, spacing: Spacing) {
+        val meta = (tokenMap.get(id) as? TokenMetadata.Token)
+        if (meta != null) {
+            ranges.mergeAdd(MappedTextRange(meta.startOffset, sb.length, text.length + meta.rightTrivia.length))
         }
         sb.append(text)
+        if (meta != null) {
+            sb.append(meta.rightTrivia)
+
+            if (meta.rightTrivia.isEmpty() && spacing == Spacing.Alone) {
+                sb.append(" ")
+            }
+        } else if (spacing == Spacing.Alone) {
+            sb.append(" ")
+        }
     }
 
-    private fun appendOpenDelim(delimiter: Delimiter) {
-        val offset = (tokenMap.get(delimiter.id) as? TokenTextRange.Delimiter)?.openOffset
-        if (offset != null) {
-            ranges.mergeAdd(MappedTextRange(offset, sb.length, 1))
+    private fun appendDelimiterPart(delimiter: Delimiter, part: DelimiterBracePart) {
+        val meta = (tokenMap.get(delimiter.id) as? TokenMetadata.Delimiter)?.let { part.metaGetter(it) }
+        if (meta != null) {
+            ranges.mergeAdd(MappedTextRange(meta.startOffset, sb.length, 1 + meta.rightTrivia.length))
         }
-        sb.append(delimiter.kind.openText)
+        sb.append(part.textGetter(delimiter.kind))
+        if (meta != null) {
+            sb.append(meta.rightTrivia)
+        }
     }
 
-    private fun appendCloseDelim(delimiter: Delimiter) {
-        val offset = (tokenMap.get(delimiter.id) as? TokenTextRange.Delimiter)?.closeOffset
-        if (offset != null && offset != -1) {
-            ranges.mergeAdd(MappedTextRange(offset, sb.length, 1))
-        }
-        sb.append(delimiter.kind.closeText)
+    private enum class DelimiterBracePart(
+        val metaGetter: (TokenMetadata.Delimiter) -> TokenMetadata.Token?,
+        val textGetter: (MacroBraces) -> String
+    ) {
+        OPEN(TokenMetadata.Delimiter::open, MacroBraces::openText),
+        CLOSE(TokenMetadata.Delimiter::close, MacroBraces::closeText)
     }
 }
