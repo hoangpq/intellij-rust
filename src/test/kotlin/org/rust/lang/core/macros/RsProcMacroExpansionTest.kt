@@ -11,7 +11,7 @@ import org.rust.cargo.RsWithToolchainTestBase
 import org.rust.cargo.project.model.cargoProjects
 import org.rust.ide.experiments.RsExperiments
 import org.rust.lang.core.macros.proc.ProcMacroExpander
-import org.rust.lang.core.macros.proc.ProcMacroServer
+import org.rust.lang.core.macros.proc.ProcMacroServerPool
 import org.rust.lang.core.macros.tt.parseSubtree
 import org.rust.lang.core.macros.tt.toDebugString
 import org.rust.lang.core.parser.createRustPsiBuilder
@@ -105,7 +105,7 @@ class RsProcMacroExpansionTest : RsWithToolchainTestBase() {
             .find { it.name == "my_proc_macro" }!!
         val lib = pkg.procMacroArtifact?.path?.toString()
             ?: error("Procedural macro artifact is not found. This most likely means a compilation failure")
-        val server = ProcMacroServer.tryCreate(testRootDisposable)
+        val server = ProcMacroServerPool.tryCreate(testRootDisposable)
             ?: return@runWithEnabledFeatures // native-helper is not available
         val expander = ProcMacroExpander(project, server)
 
@@ -127,7 +127,7 @@ class RsProcMacroExpansionTest : RsWithToolchainTestBase() {
     fun `test CantRunExpander error`() {
         val nonExistingFile = myFixture.tempDirPath.toPath().resolve("non/existing/file")
         assertFalse(nonExistingFile.exists())
-        val invalidServer = ProcMacroServer.createUnchecked(nonExistingFile, testRootDisposable)
+        val invalidServer = ProcMacroServerPool.createUnchecked(nonExistingFile, testRootDisposable)
         val expander = ProcMacroExpander(project, invalidServer)
         expander.checkError<ProcMacroExpansionError.CantRunExpander>("", "", "")
     }

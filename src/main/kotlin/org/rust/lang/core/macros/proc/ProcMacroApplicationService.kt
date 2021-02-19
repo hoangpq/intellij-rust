@@ -14,15 +14,15 @@ import org.rust.openapiext.isFeatureEnabled
 @Service
 class ProcMacroApplicationService : Disposable {
 
-    private var sharedServer: ProcMacroServer? = null
+    private var sharedServer: ProcMacroServerPool? = null
 
     @Synchronized
-    fun getServer(): ProcMacroServer? {
+    fun getServer(): ProcMacroServerPool? {
         if (!isFeatureEnabled(RsExperiments.PROC_MACROS)) return null
 
         var server = sharedServer
         if (server == null) {
-            server = ProcMacroServer.tryCreate(this)
+            server = ProcMacroServerPool.tryCreate(this)
             sharedServer = server
         }
         return server

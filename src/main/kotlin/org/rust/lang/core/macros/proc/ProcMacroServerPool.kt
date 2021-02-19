@@ -14,6 +14,7 @@ import com.intellij.openapi.diagnostic.debug
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.registry.Registry
+import com.intellij.util.concurrency.AppExecutorUtil
 import org.rust.lang.core.macros.MACRO_LOG
 import org.rust.lang.core.macros.tt.TokenTree
 import org.rust.lang.core.macros.tt.TokenTreeJsonAdapter
@@ -27,7 +28,7 @@ import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-class ProcMacroServer private constructor(
+class ProcMacroServerPool private constructor(
     expanderExecutable: Path,
     parentDisposable: Disposable
 ) {
@@ -50,7 +51,7 @@ class ProcMacroServer private constructor(
     }
 
     companion object {
-        fun tryCreate(parentDisposable: Disposable): ProcMacroServer? {
+        fun tryCreate(parentDisposable: Disposable): ProcMacroServerPool? {
             val expanderExecutable = RsPathManager.nativeHelper()
             if (expanderExecutable == null || !expanderExecutable.isExecutable()) {
                 return null
@@ -59,8 +60,8 @@ class ProcMacroServer private constructor(
         }
 
         @VisibleForTesting
-        fun createUnchecked(expanderExecutable: Path, parentDisposable: Disposable): ProcMacroServer {
-            return ProcMacroServer(expanderExecutable, parentDisposable)
+        fun createUnchecked(expanderExecutable: Path, parentDisposable: Disposable): ProcMacroServerPool {
+            return ProcMacroServerPool(expanderExecutable, parentDisposable)
         }
     }
 }
@@ -73,6 +74,8 @@ private class Pool(
     private val stackLock: Lock = ReentrantLock()
     private val stackIsNotEmpty: Condition = stackLock.newCondition()
 
+    private val idleProcessCleaner: ScheduledFuture<*>
+
     @Volatile
     private var isDisposed: Boolean = false
 
@@ -80,6 +83,9 @@ private class Pool(
         repeat(limit) {
             stack.add(null)
         }
+
+        idleProcessCleaner = AppExecutorUtil.getAppScheduledExecutorService()
+            .scheduleWithFixedDelay(::killIdleExpanders, MAX_IDLE_MILLIS, MAX_IDLE_MILLIS, TimeUnit.SECONDS)
     }
 
     fun alloc(): ProcMacroServerProcess {
@@ -118,11 +124,32 @@ private class Pool(
         }
     }
 
+    private fun killIdleExpanders() {
+        val processesToDispose = stackLock.withLock {
+            stack.indices.mapNotNull { i ->
+                val process = stack[i]
+                if (process != null && process.idleTime > MAX_IDLE_MILLIS) {
+                    stack[i] = null
+                }
+                process
+            }
+        }
+        // Dispose without the lock
+        for (process in processesToDispose) {
+            Disposer.dispose(process)
+        }
+    }
+
     override fun dispose() {
         isDisposed = true
+        idleProcessCleaner.cancel(false)
         if (stack.size != limit) {
             MACRO_LOG.error("Some processes were not freed! ${stack.size} != $limit")
         }
+    }
+
+    companion object {
+        private const val MAX_IDLE_MILLIS: Long = 60_000;
     }
 }
 
@@ -140,6 +167,8 @@ private class ProcMacroServerProcess private constructor(
     private val lock = ReentrantLock()
     private val requestQueue = SynchronousQueue<Pair<Request, CompletableFuture<Response>>>()
     private val task: Future<*> = ProcessIOExecutorService.INSTANCE.submit(this)
+    @Volatile
+    private var lastUsed: Long = System.currentTimeMillis()
     @Volatile
     private var isDisposed: Boolean = false
 
@@ -167,12 +196,16 @@ private class ProcMacroServerProcess private constructor(
             Disposer.dispose(this)
             throw t
         } finally {
+            lastUsed = System.currentTimeMillis()
             lock.unlock()
         }
     }
 
     val isValid: Boolean
         get() = !isDisposed && process.isAlive
+
+    val idleTime: Long
+        get() = System.currentTimeMillis() - lastUsed
 
     override fun run() {
         try {
@@ -243,8 +276,12 @@ private class ProcMacroServerProcess private constructor(
             MACRO_LOG.debug { "Starting proc macro expander process $expanderExecutable" }
             val process: Process = try {
                 ProcessBuilder(expanderExecutable.toString())
-                    // Let a proc macro know that it is ran from intellij-rust
-                    .apply { environment()["INTELLIJ_RUST"] = "true" }
+                    .apply {
+                        environment().apply {
+                            // Let a proc macro know that it is ran from intellij-rust
+                            put("INTELLIJ_RUST", "1")
+                        }
+                    }
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start()
             } catch (e: IOException) {

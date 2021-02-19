@@ -21,7 +21,7 @@ import java.util.concurrent.TimeoutException
 
 class ProcMacroExpander(
     private val project: Project,
-    private val server: ProcMacroServer? = ProcMacroApplicationService.getInstance().getServer()
+    private val server: ProcMacroServerPool? = ProcMacroApplicationService.getInstance().getServer()
 ) : MacroExpander<RsProcMacroData, ProcMacroExpansionError>() {
 
     override fun expandMacroAsTextWithErr(
