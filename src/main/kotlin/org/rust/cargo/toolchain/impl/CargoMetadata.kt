@@ -5,13 +5,13 @@
 
 package org.rust.cargo.toolchain.impl
 
-import com.google.gson.Gson
-import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.PathUtil
+import com.intellij.util.io.exists
+import com.intellij.util.text.SemVer
 import org.rust.cargo.CfgOptions
 import org.rust.cargo.project.workspace.*
 import org.rust.cargo.project.workspace.CargoWorkspace.Edition
@@ -70,12 +70,22 @@ object CargoMetadata {
          */
         val version: String,
 
+        val authors: List<String>,
+
         /**
          * Where did this package comes from? Local file system, crates.io, github repository.
          *
          * Will be `null` for the root package and path dependencies.
          */
         val source: String?,
+
+        val description: String?,
+
+        val repository: String?,
+
+        val license: String?,
+
+        val license_file: String?,
 
         /**
          * A unique id.
@@ -330,7 +340,8 @@ object CargoMetadata {
         enabledFeatures: Set<String>,
         buildMessages: List<CompilerMessage>
     ): CargoWorkspaceData.Package? {
-        val root = fs.refreshAndFindFileByPath(PathUtil.getParentPath(manifest_path))
+        val rootPath = PathUtil.getParentPath(manifest_path)
+        val root = fs.refreshAndFindFileByPath(rootPath)
             ?.let { if (isWorkspaceMember) it else it.canonicalFile }
         checkNotNull(root) { "`cargo metadata` reported a package which does not exist at `$manifest_path`" }
 
@@ -348,9 +359,29 @@ object CargoMetadata {
 
         val cfgOptions = buildScriptMessage?.cfgs?.let { CfgOptions.parse(it) }
 
-        val env = buildScriptMessage?.env.orEmpty()
+        val envFromBuildscript = buildScriptMessage?.env.orEmpty()
             .filter { it.size == 2 }
             .associate { (key, value) -> key to value }
+
+        val semver = SemVer.parseFromText(version)
+
+        // https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
+        val env: Map<String, String> = envFromBuildscript + mapOf(
+            "CARGO_MANIFEST_DIR" to rootPath,
+            "CARGO" to "cargo", // TODO get from toolchain
+            "CARGO_PKG_VERSION" to version,
+            "CARGO_PKG_VERSION_MAJOR" to (semver?.major?.toString() ?: ""),
+            "CARGO_PKG_VERSION_MINOR" to (semver?.minor?.toString() ?: ""),
+            "CARGO_PKG_VERSION_PATCH" to (semver?.patch?.toString() ?: ""),
+            "CARGO_PKG_VERSION_PRE" to (semver?.preRelease ?: ""),
+            "CARGO_PKG_AUTHORS" to authors.joinToString(separator = ";"),
+            "CARGO_PKG_NAME" to name,
+            "CARGO_PKG_DESCRIPTION" to description.orEmpty(),
+            "CARGO_PKG_REPOSITORY" to repository.orEmpty(),
+            "CARGO_PKG_LICENSE" to license.orEmpty(),
+            "CARGO_PKG_LICENSE_FILE" to license_file.orEmpty(),
+            "CARGO_CRATE_NAME" to name.replace('-', '_'),
+        )
 
         val outDirPath = buildScriptMessage?.out_dir ?: variables.getOutDirPath(this)
         val outDir = outDirPath
