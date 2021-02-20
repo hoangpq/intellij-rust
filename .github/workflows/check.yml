@@ -135,6 +135,11 @@ jobs:
               with:
                   arguments: ":resolveDependencies -Pkotlin.incremental=false --no-daemon"
 
+            - name: Build native
+              uses: eskatos/gradle-command-action@v1
+              with:
+                  arguments: ":compileNativeCode -Pkotlin.incremental=false --no-daemon"
+
             - name: Build
               uses: eskatos/gradle-command-action@v1
               with:
