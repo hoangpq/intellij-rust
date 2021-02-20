@@ -316,7 +316,7 @@ class DefCollector(
             ?: return false
         val defData = RsMacroDataWithHash.fromDefInfo(def)
             ?: return false
-        val callData = RsMacroCallDataWithHash(RsMacroCallData(call.body), call.bodyHash)
+        val callData = RsMacroCallDataWithHash(RsMacroCallData(call.body, defMap.metaData.env), call.bodyHash)
         val (expandedFile, expansion) =
             macroExpanderShared.createExpansionStub(project, macroExpander, defData, callData) ?: return true
 

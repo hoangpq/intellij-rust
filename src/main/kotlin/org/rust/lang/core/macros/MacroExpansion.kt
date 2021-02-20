@@ -125,7 +125,7 @@ fun <T : RsMacroData, E> MacroExpander<T, E>.expandMacro(
     factory: RsPsiFactory,
     storeRangeMap: Boolean
 ): RsResult<MacroExpansion, MacroExpansionAndParsingError<E>> {
-    val (expandedText, ranges) = expandMacroAsTextWithErr(def, RsMacroCallData(call))
+    val (expandedText, ranges) = expandMacroAsTextWithErr(def, RsMacroCallData.fromPsi(call))
         .unwrapOrElse { return Err(ExpansionError(it)) }
     val context = call.expansionContext
     val expansion = parseExpandedTextWithContext(context, factory, expandedText)

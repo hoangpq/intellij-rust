@@ -134,8 +134,8 @@ class MacroExpansionSharedCache : Disposable {
     }
 
     fun <T : RsMacroData> cachedExpand(expander: MacroExpander<T, *>, def: RsMacroDataWithHash<T>, call: RsMacroCall): ExpansionResult? {
-        val callData = RsMacroCallData(call)
-        val hash = HashCode.mix(def.bodyHash ?: return null, call.bodyHash ?: return null)
+        val callData = RsMacroCallData.fromPsi(call)
+        val hash = def.mixHash(RsMacroCallDataWithHash(callData, call.bodyHash)) ?: return null
         return cachedExpand(expander, def.data, callData, hash)
     }
 
@@ -181,7 +181,7 @@ class MacroExpansionSharedCache : Disposable {
         def: RsMacroDataWithHash<T>,
         call: RsMacroCallDataWithHash
     ): Pair<RsFileStub, ExpansionResult>? {
-        val hash = HashCode.mix(def.bodyHash ?: return null, call.bodyHash ?: return null)
+        val hash = def.mixHash(call) ?: return null
         val result = cachedExpand(expander, def.data, call.data, hash) ?: return null
         val serializedStub = cachedBuildStub(hash) {
             val file = ReadOnlyLightVirtualFile("macro.rs", RsLanguage, result.text)

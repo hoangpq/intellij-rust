@@ -17,6 +17,14 @@ class RsMacroDataWithHash<T: RsMacroData>(
     val data: T,
     val bodyHash: HashCode?
 ) {
+    fun mixHash(call: RsMacroCallDataWithHash): HashCode? {
+        val callHash = when (data as RsMacroData) {
+            is RsDeclMacroData -> call.bodyHash
+            is RsProcMacroData -> call.hashWithEnv()
+        }
+        return HashCode.mix(bodyHash ?: return null, callHash ?: return null)
+    }
+
     companion object {
         fun fromPsi(def: RsNamedElement): RsMacroDataWithHash<RsMacroData>? {
             return when {

@@ -21,6 +21,7 @@ sealed class Request {
         val macroName: String,
         val attributes: TokenTree.Subtree?,
         val lib: String,
+        val env: List<List<String>>
     ) : Request()
 }
 

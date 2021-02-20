@@ -8,10 +8,6 @@ package org.rust.lang.core.macros.tt
 import com.google.gson.GsonBuilder
 import org.intellij.lang.annotations.Language
 import org.rust.RsTestBase
-import org.rust.lang.core.macros.proc.Request
-import org.rust.lang.core.macros.proc.RequestJsonAdapter
-import org.rust.lang.core.macros.proc.Response
-import org.rust.lang.core.macros.proc.ResponseJsonAdapter
 import org.rust.lang.core.parser.createRustPsiBuilder
 
 class TokenTreeJsonAdapterTest : RsTestBase() {
@@ -299,8 +295,6 @@ class TokenTreeJsonAdapterTest : RsTestBase() {
         val subtree = project.createRustPsiBuilder(code).parseSubtree().subtree
         val gson = GsonBuilder()
             .serializeNulls()
-            .registerTypeAdapter(Request::class.java, RequestJsonAdapter())
-            .registerTypeAdapter(Response::class.java, ResponseJsonAdapter())
             .registerTypeAdapter(TokenTree::class.java, TokenTreeJsonAdapter())
             .setPrettyPrinting()
             .create()

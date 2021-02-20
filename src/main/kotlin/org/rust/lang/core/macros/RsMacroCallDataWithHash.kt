@@ -10,4 +10,15 @@ import org.rust.stdext.HashCode
 class RsMacroCallDataWithHash(
     val data: RsMacroCallData,
     val bodyHash: HashCode?
-)
+) {
+    fun hashWithEnv(): HashCode? {
+        val bodyHash = bodyHash ?: return null
+        val env = data.packageEnv
+            .entries
+            .toList()
+            .sortedBy { it.key }
+            .joinToString(separator = ";") { it.key + "=" + it.value }
+        val envHash = HashCode.compute(env)
+        return HashCode.mix(bodyHash, envHash)
+    }
+}

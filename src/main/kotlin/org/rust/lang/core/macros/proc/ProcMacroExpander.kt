@@ -29,11 +29,12 @@ class ProcMacroExpander(
         call: RsMacroCallData
     ): RsResult<Pair<CharSequence, RangeMap>, ProcMacroExpansionError> {
         val macroCallBodyText = call.macroBody ?: return Err(ProcMacroExpansionError.MacroCallSyntax)
+        val env = call.packageEnv
         val (macroCallBodyLowered, rangesLowering) = project
             .createRustPsiBuilder(macroCallBodyText)
             .lowerDocCommentsToPsiBuilder(project)
         val (macroCallBodyTt, tokenMap) = macroCallBodyLowered.parseSubtree()
-        return expandMacroAsTtWithErr(macroCallBodyTt, def.name, def.artifact.path.toString()).map {
+        return expandMacroAsTtWithErr(macroCallBodyTt, def.name, def.artifact.path.toString(), env).map {
             val (text, ranges) = MappedSubtree(it, tokenMap).toMappedText()
             text to rangesLowering.mapAll(ranges)
         }
@@ -42,11 +43,13 @@ class ProcMacroExpander(
     fun expandMacroAsTtWithErr(
         macroCallBody: TokenTree.Subtree,
         macroName: String,
-        lib: String
+        lib: String,
+        env: Map<String, String> = emptyMap()
     ): RsResult<TokenTree.Subtree, ProcMacroExpansionError> {
         val server = server ?: return Err(ProcMacroExpansionError.ExecutableNotFound)
+        val envList = env.map { listOf(it.key, it.value) }
         val response = try {
-            server.send(Request.ExpansionMacro(macroCallBody, macroName, null, lib))
+            server.send(Request.ExpansionMacro(macroCallBody, macroName, null, lib, envList))
         } catch (ignored: TimeoutException) {
             return Err(ProcMacroExpansionError.Timeout)
         } catch (e: ProcessCreationException) {
