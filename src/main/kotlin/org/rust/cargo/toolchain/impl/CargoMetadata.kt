@@ -16,10 +16,12 @@ import org.rust.cargo.CfgOptions
 import org.rust.cargo.project.workspace.*
 import org.rust.cargo.project.workspace.CargoWorkspace.Edition
 import org.rust.cargo.project.workspace.CargoWorkspace.LibKind
+import org.rust.openapiext.RsPathManager
 import org.rust.openapiext.findFileByMaybeRelativePath
 import org.rust.stdext.HashCode
 import org.rust.stdext.mapToSet
 import java.io.IOException
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.*
 
@@ -385,13 +387,30 @@ object CargoMetadata {
             .find { file -> DYNAMIC_LIBRARY_EXTENSIONS.any { file.endsWith(it) } }
 
         return procMacroArtifactPath?.let {
-            val path = Path.of(procMacroArtifactPath)
+            val originPath = Path.of(procMacroArtifactPath)
+
             val hash = try {
-                HashCode.ofFile(path)
+                HashCode.ofFile(originPath)
             } catch (e: IOException) {
                 LOG.warn(e)
                 return@let null
             }
+
+            val path = try {
+                val dir = RsPathManager.tempPluginDirInSystem().resolve("proc_macros")
+                Files.createDirectories(dir) // throws IOException
+                val filename = originPath.fileName.toString()
+                val extension = PathUtil.getFileExtension(filename)
+                val targetPath = dir.resolve("$filename.$hash.$extension")
+                if (!targetPath.exists()) {
+                    Files.copy(originPath, targetPath) // throws IOException
+                }
+                targetPath
+            } catch (e: IOException) {
+                LOG.warn(e)
+                originPath
+            }
+
             CargoWorkspaceData.ProcMacroArtifact(path, hash)
         }
     }
