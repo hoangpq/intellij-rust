@@ -130,6 +130,17 @@ jobs:
             #  if: matrix.os == 'windows-latest'
             #  run: New-Item -ItemType Junction -Path "$env:RUST_SRC_WITH_SYMLINK" -Target "$(rustc --print sysroot)/lib/rustlib/src/rust"
 
+            - name: Cache native code
+              uses: actions/cache@v2
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      native-helper/target
+                  key: ${{ runner.os }}-cache-native-code-${{ matrix.rust-version }}-${{ github.run_id }} # https://github.com/actions/cache/issues/342#issuecomment-673371329
+                  restore-keys: |
+                      ${{ runner.os }}-cache-native-code-${{ matrix.rust-version }}-
+
             - name: Download
               uses: eskatos/gradle-command-action@v1
               with:
