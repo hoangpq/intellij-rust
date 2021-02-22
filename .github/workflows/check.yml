@@ -28,7 +28,7 @@ jobs:
 
     build-native-code:
         strategy:
-            fail-fast: true
+            fail-fast: false
             matrix:
                 config:
                     - name: linux
