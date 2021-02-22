@@ -68,7 +68,7 @@ jobs:
                       ~/.cargo/registry
                       ~/.cargo/git
                       native-helper/target
-                  key: ${{ runner.os }}-cache-native-code-${{ hashFiles('native-helper/Cargo.lock') }}
+                  key: ${{ runner.os }}-native-code-${{ hashFiles('native-helper/Cargo.lock') }}
 
             - name: Build
               uses: actions-rs/cargo@v1
