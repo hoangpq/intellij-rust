@@ -62,13 +62,13 @@ jobs:
                   default: true
 
             - name: Cache native code
-              uses: actions/cache@v2
+              uses: actions/cache@v2.1.4
               with:
                   path: |
                       ~/.cargo/registry
                       ~/.cargo/git
                       native-helper/target
-                  key: ${{ runner.os }}-native-code-${{ hashFiles('native-helper/Cargo.lock') }}
+                  key: ${{ runner.os }}-native-helper-${{ hashFiles('native-helper/Cargo.lock') }}
 
             - name: Build
               uses: actions-rs/cargo@v1
