@@ -314,7 +314,7 @@ private class WorkspaceImpl(
         }
 
         val stdAll = stdlib.crates.associateBy { it.id }
-        val stdInternalDeps = stdlib.crates.filter { it.origin == DEPENDENCY }.mapToSet { it.id }
+        val stdInternalDeps = stdlib.crates.filter { it.origin == STDLIB_DEPENDENCY }.mapToSet { it.id }
 
         val result = WorkspaceImpl(
             manifestPath,
