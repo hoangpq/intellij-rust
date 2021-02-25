@@ -80,7 +80,7 @@ inline val RsEnumVariantStub.namespaces: Set<Namespace> get() = if (blockFields 
 val RsUseSpeck.namespaces: Set<Namespace>
     get() = path
         ?.reference
-        ?.multiResolve()
+        ?.multiResolvePublicOnly()
         ?.asSequence()
         ?.filterIsInstance<RsNamedElement>()
         ?.flatMap { it.namespaces.asSequence() }
