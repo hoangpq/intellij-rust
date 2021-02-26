@@ -90,6 +90,9 @@ class CratesLocalIndexServiceImpl
     @Volatile
     private var state: CratesLocalIndexState = CratesLocalIndexState()
 
+    /**
+     * [isReady] will be true when index is not updating
+     */
     private val isReady: AtomicBoolean = AtomicBoolean(true)
 
     init {
