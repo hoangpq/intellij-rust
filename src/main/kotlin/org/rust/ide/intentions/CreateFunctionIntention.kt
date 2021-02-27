@@ -10,7 +10,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapiext.isUnitTestMode
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.parentOfType
-import com.intellij.psi.util.parentsOfType
 import org.rust.cargo.project.workspace.PackageOrigin
 import org.rust.ide.presentation.renderInsertionSafe
 import org.rust.ide.utils.GenericConstraints
@@ -38,7 +37,7 @@ class CreateFunctionIntention : RsElementBaseIntentionAction<CreateFunctionInten
 
     sealed class Context(val name: String, val callElement: PsiElement) {
         abstract val visibility: String
-        open val isAsync: Boolean = callElement.isEdition2018
+        open val isAsync: Boolean = callElement.isAtLeastEdition2018
         abstract val arguments: RsValueArgumentList
         abstract val returnType: Ty?
         open val implItem: RsImplItem? = null

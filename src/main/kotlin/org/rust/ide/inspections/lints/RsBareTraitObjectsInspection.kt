@@ -13,7 +13,7 @@ import com.intellij.psi.PsiElementVisitor
 import org.rust.ide.inspections.RsProblemsHolder
 import org.rust.lang.core.psi.*
 import org.rust.lang.core.psi.ext.dyn
-import org.rust.lang.core.psi.ext.isEdition2018
+import org.rust.lang.core.psi.ext.isAtLeastEdition2018
 import org.rust.lang.core.psi.ext.skipParens
 import org.rust.lang.core.resolve.ref.deepResolve
 
@@ -23,7 +23,7 @@ class RsBareTraitObjectsInspection : RsLintInspection() {
     override fun buildVisitor(holder: RsProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor =
         object : RsVisitor() {
             override fun visitTypeReference(typeReference: RsTypeReference) {
-                if (!typeReference.isEdition2018) return
+                if (!typeReference.isAtLeastEdition2018) return
 
                 val traitType = typeReference.skipParens() as? RsTraitType
                 val baseTypePath = (typeReference.skipParens() as? RsBaseType)?.path
